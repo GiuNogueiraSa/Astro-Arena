@@ -1,21 +1,25 @@
-🚀 Astro-Arena: Documentação de Projeto
+🚀 Astro-Arena: Battle Edition
 
 1. Visão Geral
-Astro-Arena é um jogo de combate de arena baseado em física, onde a inércia é sua maior aliada e sua pior inimiga. O objetivo é simples: ser o último círculo dentro da zona de combate.
-
-Gênero: Arcade / Physics-based Combat.
-Plataforma: Web (GitHub Pages).
-Motor: Python + Pygame-ce.
+Astro-Arena evoluiu para um jogo de combate espacial frenético. Agora, você não apenas empurra seus inimigos, mas utiliza canhões lasers para destruí-los e avançar pelas fases.
 
 2. Mecânicas Principais (Core Mechanics)
-A diversão do jogo reside na fórmula do momento linear:
-p = m * v
-Onde p é a força do impacto, m é a massa da sua nave e v é a velocidade no momento do choque.
+- **Sistema de Tiro**: O Dash foi substituído por disparos de energia. Use `ESPAÇO` ou `MOUSE` para atirar.
+- **Física de Inércia**: A nave mantém o movimento, exigindo habilidade para navegar e mirar.
+- **Progressão por Fases**: Complete 3 níveis com dificuldade progressiva.
+- **Visual Espacial**: Fundo com estrelas em paralaxe e naves com design geométrico moderno.
 
-O Dash (Arrancada): A única forma de ataque. O jogador acumula energia e dispara em uma direção.
-Colisão Elástica: Ao colidir, a energia é transferida. Se você atingir um inimigo parado enquanto está em alta velocidade, ele será arremessado longe.
-Sistema de Massa: Ao derrotar inimigos, sua nave absorve "poeira estelar", aumentando sua massa (m). Isso torna você mais difícil de ser empurrado, mas mais lento para acelerar.
-Arena Dinâmica: As bordas podem ser elásticas (estilo "pinball") ou inexistentes (quem sair da tela perde).
+3. Controles
+- **WASD ou Setas**: Movimentação e rotação.
+- **Espaço ou Clique Esquerdo**: Atirar.
+- **Menu**: Clique em INICIAR para começar ou SAIR para fechar.
+
+4. Roadmap de Desenvolvimento
+Fase 01: Movimento e Tiro básico. [Concluído ✅]
+Fase 02: Design de Naves e Estrelas. [Concluído ✅]
+Fase 03: Sistema de 3 Fases e Menus. [Concluído ✅]
+Fase 04: IA agressiva e efeitos de impacto. [Concluído ✅]
+Fase 05: Deploy Web atualizado. [Pronto 🚀]
 
 3. Stack Técnica e Fluxo de Trabalho
 Configuração do Repositório:
