@@ -31,5 +31,5 @@ jobs:
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: src/build/web # Default pygbag output folder
+          folder: build/web # Pygbag creates this at the root
           branch: gh-pages
