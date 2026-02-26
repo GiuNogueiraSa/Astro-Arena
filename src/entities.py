@@ -6,7 +6,7 @@ class Bullet:
     def __init__(self, x, y, angle, speed, color, owner_type="player"):
         self.pos = pygame.Vector2(x, y)
         self.velocity = pygame.Vector2(math.cos(angle), math.sin(angle)) * speed
-        self.radius = 4
+        self.radius = 6 # Slightly larger bullets for larger ships
         self.color = color
         self.life = 2.0
         self.owner_type = owner_type
@@ -18,27 +18,26 @@ class Bullet:
     def draw(self, screen, camera_offset):
         draw_pos = self.pos - camera_offset
         # Bullet glow
-        pygame.draw.circle(screen, self.color, (int(draw_pos.x), int(draw_pos.y)), self.radius + 3)
+        pygame.draw.circle(screen, self.color, (int(draw_pos.x), int(draw_pos.y)), self.radius + 4)
         pygame.draw.circle(screen, (255, 255, 255), (int(draw_pos.x), int(draw_pos.y)), self.radius)
 
 class Item:
     def __init__(self, x, y, item_type):
         self.pos = pygame.Vector2(x, y)
         self.item_type = item_type # "REPAIR", "SHIELD", "WEAPON"
-        self.radius = 15
+        self.radius = 20
         self.angle = 0
         self.color = (0, 255, 100) if item_type == "REPAIR" else (0, 100, 255) if item_type == "SHIELD" else (255, 200, 0)
 
     def update(self, dt):
-        self.angle += 3 * dt # Rotation effect
+        self.angle += 3 * dt
 
     def draw(self, screen, camera_offset):
         draw_pos = self.pos - camera_offset
-        # Floating diamond shape
         pts = []
         for i in range(4):
             a = self.angle + i * (math.pi/2)
-            pts.append((draw_pos.x + math.cos(a)*15, draw_pos.y + math.sin(a)*15))
+            pts.append((draw_pos.x + math.cos(a)*18, draw_pos.y + math.sin(a)*18))
         pygame.draw.polygon(screen, self.color, pts, 0)
         pygame.draw.polygon(screen, (255, 255, 255), pts, 2)
 
@@ -58,7 +57,7 @@ class Entity:
         self.pos += self.velocity * dt
         self.velocity *= self.drag
         
-    def draw_ship(self, screen, points, camera_offset, show_hp=True):
+    def draw_ship(self, screen, points, camera_offset, show_hp=True, engine_count=1, cockpit_color=(255,200,50)):
         draw_pos = self.pos - camera_offset
         rotated_points = []
         for p in points:
@@ -66,40 +65,52 @@ class Entity:
             ry = p[0] * math.sin(self.angle) + p[1] * math.cos(self.angle)
             rotated_points.append((draw_pos.x + rx, draw_pos.y + ry))
         
-        pygame.draw.polygon(screen, self.color, rotated_points, 0)
+        # Ship body shadow/glow
+        pygame.draw.polygon(screen, (self.color[0]//2, self.color[1]//2, self.color[2]//2), rotated_points, 0)
         pygame.draw.polygon(screen, (255, 255, 255), rotated_points, 2)
         
-        # Engine trails
-        if self.velocity.length() > 20:
-            flare_pos = draw_pos - pygame.Vector2(math.cos(self.angle), math.sin(self.angle)) * (self.radius * 0.8)
-            pygame.draw.circle(screen, (255, 150, 50), (int(flare_pos.x), int(flare_pos.y)), random.randint(4, 9))
+        # Cockpit (Center point approx)
+        cockpit_pos = draw_pos + pygame.Vector2(math.cos(self.angle), math.sin(self.angle)) * 10
+        pygame.draw.circle(screen, cockpit_color, (int(cockpit_pos.x), int(cockpit_pos.y)), 6)
+        
+        # Engine trails (Inspired by image: multiple blue jets for player, red jets for enemy)
+        if self.velocity.length() > 30:
+            for i in range(engine_count):
+                offset = (i - (engine_count-1)/2) * 15
+                off_vec = pygame.Vector2(math.cos(self.angle + math.pi/2), math.sin(self.angle + math.pi/2)) * offset
+                flare_pos = draw_pos - pygame.Vector2(math.cos(self.angle), math.sin(self.angle)) * (self.radius * 0.8) + off_vec
+                flare_color = (100, 200, 255) if self.color[2] > 200 else (255, 100, 50)
+                pygame.draw.circle(screen, flare_color, (int(flare_pos.x), int(flare_pos.y)), random.randint(6, 12))
 
         if show_hp:
-            # HP bar
-            pygame.draw.rect(screen, (50, 0, 0), (draw_pos.x - 20, draw_pos.y - self.radius - 15, 40, 5))
-            hp_w = (self.hp / self.max_hp) * 40
-            pygame.draw.rect(screen, (0, 255, 0), (draw_pos.x - 20, draw_pos.y - self.radius - 15, hp_w, 5))
+            pygame.draw.rect(screen, (50, 0, 0), (draw_pos.x - 30, draw_pos.y - self.radius - 20, 60, 6))
+            hp_w = (self.hp / self.max_hp) * 60
+            pygame.draw.rect(screen, (0, 255, 0), (draw_pos.x - 30, draw_pos.y - self.radius - 20, hp_w, 6))
 
 class Player(Entity):
     def __init__(self, x, y):
-        super().__init__(x, y, radius=25, color=(0, 100, 255), mass=1.2, hp=100)
-        self.speed = 2500
+        super().__init__(x, y, radius=40, color=(30, 120, 255), mass=1.5, hp=150)
+        self.speed = 2800
         self.shoot_cooldown = 0.0
-        self.max_shoot_cooldown = 0.12
-        self.shield = 50
+        self.max_shoot_cooldown = 0.1
+        self.shield = 100
         self.max_shield = 100
         self.weapon_level = 1
         
-        # Sleek Hero Ship Shape
+        # Larger Detailed Hero Ship (from image)
         self.points = [
-            (35, 0),    # Nose
-            (5, -10),   # Cockpit L
-            (-5, -25),  # Wing L tip
-            (-20, -10), # Wing L back
-            (-15, 0),   # Center back
-            (-20, 10),  # Wing R back
-            (-5, 25),   # Wing R tip
-            (5, 10),    # Cockpit R
+            (50, 0),    # Nose
+            (10, -15),  # Front Body L
+            (5, -35),   # Wing Tip L Front
+            (-25, -40), # Wing Tip L Back
+            (-15, -15), # Wing connector L
+            (-35, -20), # Tail L
+            (-20, 0),   # Engine center back
+            (-35, 20),  # Tail R
+            (-15, 15),  # Wing connector R
+            (-25, 40),  # Wing Tip R Back
+            (5, 35),    # Wing Tip R Front
+            (10, 15),   # Front Body R
         ]
         
     def handle_input(self, keys, dt):
@@ -112,7 +123,6 @@ class Player(Entity):
         if move_dir.length() > 0:
             move_dir = move_dir.normalize()
             self.velocity += move_dir * (self.speed / self.mass) * dt
-            # Smooth rotation
             target_angle = math.atan2(move_dir.y, move_dir.x)
             diff = (target_angle - self.angle + math.pi) % (2 * math.pi) - math.pi
             self.angle += diff * 10 * dt
@@ -122,38 +132,41 @@ class Player(Entity):
             
         if (keys[pygame.K_SPACE] or pygame.mouse.get_pressed()[0]) and self.shoot_cooldown <= 0:
             self.shoot_cooldown = self.max_shoot_cooldown
-            # Multi-laser based on weapon level
             bullets = []
             if self.weapon_level >= 1:
-                bullets.append(Bullet(self.pos.x, self.pos.y, self.angle, 1100, (0, 255, 255), "player"))
+                bullets.append(Bullet(self.pos.x, self.pos.y, self.angle, 1200, (0, 255, 255), "player"))
             if self.weapon_level >= 2:
-                bullets.append(Bullet(self.pos.x, self.pos.y, self.angle - 0.1, 1100, (0, 255, 255), "player"))
-                bullets.append(Bullet(self.pos.x, self.pos.y, self.angle + 0.1, 1100, (0, 255, 255), "player"))
+                off_x = 20 * math.cos(self.angle + math.pi/2)
+                off_y = 20 * math.sin(self.angle + math.pi/2)
+                bullets.append(Bullet(self.pos.x + off_x, self.pos.y + off_y, self.angle, 1200, (0, 255, 255), "player"))
+                bullets.append(Bullet(self.pos.x - off_x, self.pos.y - off_y, self.angle, 1200, (0, 255, 255), "player"))
             return bullets
         return None
 
     def draw(self, screen, camera_offset):
         if self.shield > 0:
             draw_pos = self.pos - camera_offset
-            pygame.draw.circle(screen, (0, 150, 255), (int(draw_pos.x), int(draw_pos.y)), self.radius + 5, 2)
-        self.draw_ship(screen, self.points, camera_offset)
+            pygame.draw.circle(screen, (0, 200, 255), (int(draw_pos.x), int(draw_pos.y)), self.radius + 10, 3)
+        self.draw_ship(screen, self.points, camera_offset, engine_count=3, cockpit_color=(255, 200, 0))
 
 class Enemy(Entity):
     def __init__(self, x, y, level=1):
-        super().__init__(x, y, radius=22, color=(255, 50, 50), mass=1.0, hp=20 * level)
+        super().__init__(x, y, radius=35, color=(220, 40, 40), mass=1.2, hp=30 * level)
         self.level = level
-        self.speed = 600 + level * 200
-        self.shoot_cooldown = random.uniform(1, 3)
-        self.max_shoot_cooldown = max(0.8, 2.5 - level * 0.5)
+        self.speed = 700 + level * 150
+        self.shoot_cooldown = random.uniform(2, 4)
+        self.max_shoot_cooldown = max(1.0, 3.0 - level * 0.4)
         
-        # Aggressive Enemy Shape
+        # Bulky Red Enemy (from image)
         self.points = [
-            (25, 0),
-            (0, -20),
-            (-15, -15),
-            (-5, 0),
-            (-15, 15),
-            (0, 20)
+            (35, 0),    # Roundish nose tip
+            (15, -25),  # Side wing front L
+            (-15, -35), # Side wing back L
+            (-30, -20), # Tail corner L
+            (-20, 0),   # Back indent
+            (-30, 20),  # Tail corner R
+            (-15, 35),  # Side wing back R
+            (15, 25),   # Side wing front R
         ]
         
     def update_ai(self, target_pos, dt):
@@ -162,21 +175,18 @@ class Enemy(Entity):
         
         if dist > 0:
             dir_vec = dir_vec.normalize()
-            # Enemies try to stay at a distance but keep rotating towards player
-            if dist > 300:
+            if dist > 400:
                 self.velocity += dir_vec * (self.speed / self.mass) * dt
-            elif dist < 200:
+            elif dist < 300:
                 self.velocity -= dir_vec * (self.speed / self.mass) * dt
-            
             self.angle = math.atan2(dir_vec.y, dir_vec.x)
 
-        # Shooting AI
         if self.shoot_cooldown > 0:
             self.shoot_cooldown -= dt
-        elif dist < 600:
+        elif dist < 700:
             self.shoot_cooldown = self.max_shoot_cooldown
-            return Bullet(self.pos.x, self.pos.y, self.angle, 700, (255, 100, 0), "enemy")
+            return Bullet(self.pos.x, self.pos.y, self.angle, 750, (255, 50, 50), "enemy")
         return None
 
     def draw(self, screen, camera_offset):
-        self.draw_ship(screen, self.points, camera_offset)
+        self.draw_ship(screen, self.points, camera_offset, engine_count=2, cockpit_color=(100, 200, 255))
