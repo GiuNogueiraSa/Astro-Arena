@@ -1,83 +1,127 @@
 import pygame
 import asyncio
-import math
+import random
+import sys
+from src.entities import Player, Enemy
+from src.physics import handle_collision
 
-# Inicialização do Pygame
+# Initialize Pygame
+pygame.init()
+
+# Constants
+WIDTH, HEIGHT = 800, 600
+FPS = 60
+
+# Colors
+BG_COLOR = (15, 15, 25)
+ARENA_COLOR = (30, 30, 45)
+
+class Particle:
+    def __init__(self, x, y, color):
+        self.pos = pygame.Vector2(x, y)
+        self.vel = pygame.Vector2(random.uniform(-5, 5), random.uniform(-5, 5))
+        self.life = 1.0
+        self.color = color
+
+    def update(self, dt):
+        self.pos += self.vel * 60 * dt
+        self.life -= 2.0 * dt
+
+    def draw(self, screen):
+        val = int(255 * self.life)
+        if val > 0:
+            pygame.draw.circle(screen, self.color, (int(self.pos.x), int(self.pos.y)), 2)
+
 async def main():
-    pygame.init()
-    
-    # Configurações da tela
-    WIDTH, HEIGHT = 800, 600
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("Astro-Arena: Protótipo")
-    
-    # Cores
-    SPACE_DARK = (10, 10, 25)
-    PLAYER_COLOR = (0, 200, 255)
-    GLOW_COLOR = (0, 100, 255)
-    
-    # Propriedades do Jogador
-    x, y = WIDTH // 2, HEIGHT // 2
-    radius = 20
-    vel_x, vel_y = 0, 0
-    acceleration = 0.5
-    friction = 0.98
-    
+    pygame.display.set_caption("🚀 Astro-Arena")
     clock = pygame.time.Clock()
-    font = pygame.font.SysFont("Arial", 24)
-
+    
+    player = Player(WIDTH // 2, HEIGHT // 2)
+    enemies = [Enemy(random.randint(100, WIDTH-100), random.randint(100, HEIGHT-100)) for _ in range(3)]
+    particles = []
+    
+    screen_shake = 0
+    
     running = True
     while running:
-        # 1. Entrada do Usuário
+        dt = clock.tick(FPS) / 1000.0
+        
+        # Handle events
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-
+                
+        # Update
         keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-            vel_x -= acceleration
-        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-            vel_x += acceleration
-        if keys[pygame.K_UP] or keys[pygame.K_w]:
-            vel_y -= acceleration
-        if keys[pygame.K_DOWN] or keys[pygame.K_s]:
-            vel_y += acceleration
-
-        # 2. Física (Movimento e Inércia)
-        x += vel_x
-        y += vel_y
+        dashed = player.handle_input(keys, dt)
+        if dashed:
+            screen_shake = 10
+            # Add trail particles
+            for _ in range(10):
+                particles.append(Particle(player.pos.x, player.pos.y, player.color))
         
-        # Aplicar fricção (inércia do espaço)
-        vel_x *= friction
-        vel_y *= friction
-
-        # Borda elástica simplificada
-        if x - radius < 0 or x + radius > WIDTH:
-            vel_x *= -0.8
-            x = max(radius, min(WIDTH - radius, x))
-        if y - radius < 0 or y + radius > HEIGHT:
-            vel_y *= -0.8
-            y = max(radius, min(HEIGHT - radius, y))
-
-        # 3. Desenho
-        screen.fill(SPACE_DARK)
+        player.update(dt)
         
-        # Efeito de brilho (Glow)
-        for i in range(5):
-            pygame.draw.circle(screen, GLOW_COLOR, (int(x), int(y)), radius + (i * 2), 1)
+        for enemy in enemies:
+            enemy.update_ai(player.pos, dt)
+            if handle_collision(player, enemy):
+                screen_shake = 15
+                # Collision particles
+                for _ in range(15):
+                    particles.append(Particle((player.pos.x + enemy.pos.x)/2, (player.pos.y + enemy.pos.y)/2, (255, 255, 100)))
+
+        # Boundary checks (Bordas elásticas conforme doc)
+        for ent in [player] + enemies:
+            if ent.pos.x < ent.radius:
+                ent.pos.x = ent.radius
+                ent.velocity.x *= -0.8
+            elif ent.pos.x > WIDTH - ent.radius:
+                ent.pos.x = WIDTH - ent.radius
+                ent.velocity.x *= -0.8
+            if ent.pos.y < ent.radius:
+                ent.pos.y = ent.radius
+                ent.velocity.y *= -0.8
+            elif ent.pos.y > HEIGHT - ent.radius:
+                ent.pos.y = HEIGHT - ent.radius
+                ent.velocity.y *= -0.8
+        
+        # Update particles
+        for p in particles[:]:
+            p.update(dt)
+            if p.life <= 0:
+                particles.remove(p)
+                
+        # Draw
+        render_offset = pygame.Vector2(0, 0)
+        if screen_shake > 0:
+            render_offset = pygame.Vector2(random.uniform(-screen_shake, screen_shake), random.uniform(-screen_shake, screen_shake))
+            screen_shake -= 1
             
-        # Círculo do jogador
-        pygame.draw.circle(screen, PLAYER_COLOR, (int(x), int(y)), radius)
+        screen.fill(BG_COLOR)
         
-        # Instruções na tela
-        img = font.render("Use WASD ou Setas para mover. Sinta a Inércia!", True, (255, 255, 255))
-        screen.blit(img, (20, 20))
+        # Draw Arena
+        pygame.draw.rect(screen, ARENA_COLOR, (0, 0, WIDTH, HEIGHT), 5)
+        
+        # Draw everything with offset
+        for p in particles:
+            p.draw(screen)
+            
+        player.draw(screen)
+        for enemy in enemies:
+            enemy.draw(screen)
+            
+        # Draw UI (Dash cooldown)
+        if player.dash_cooldown > 0:
+            pygame.draw.arc(screen, (255,255,255), (player.pos.x - 25, player.pos.y - 25, 50, 50), 0, (player.dash_cooldown / player.max_dash_cooldown) * 2 * 3.14, 3)
 
         pygame.display.flip()
         
-        # 4. Controle de FPS e Async
-        clock.tick(60)
+        # Pygbag requirement: yield control to the browser
         await asyncio.sleep(0)
+
+    pygame.quit()
+    sys.exit()
 
 if __name__ == "__main__":
     asyncio.run(main())
