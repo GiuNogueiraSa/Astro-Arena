@@ -3,7 +3,7 @@ import asyncio
 import random
 import sys
 import math
-from src.entities import Player, Enemy, Bullet
+from src.entities import Player, Enemy, Bullet, Item
 from src.physics import handle_collision, check_bullet_collision
 
 # Initialize Pygame
@@ -11,97 +11,80 @@ pygame.init()
 
 # Constants
 WIDTH, HEIGHT = 1024, 768
+WORLD_SIZE = 3000 # Map size for "exploration"
 FPS = 60
 
 # Colors
-BG_DEEP = (3, 3, 10)
+BG_DEEP = (2, 2, 8)
 UI_ACCENT = (0, 255, 200)
 
 class Star:
     def __init__(self):
-        self.x = float(random.randint(0, WIDTH))
-        self.y = float(random.randint(0, HEIGHT))
-        self.size = random.uniform(0.5, 2.5)
-        self.speed = self.size * 0.5
-        self.brightness = random.randint(100, 255)
+        self.world_pos = pygame.Vector2(random.randint(0, WORLD_SIZE), random.randint(0, WORLD_SIZE))
+        self.size = random.uniform(0.5, 3.0)
+        self.parallax = self.size * 0.1 # Distance effect
+        self.color = (random.randint(180, 255), random.randint(180, 255), 255)
 
-    def update(self, dt):
-        self.y += self.speed * 60 * dt
-        if self.y > HEIGHT:
-            self.y = 0.0
-            self.x = float(random.randint(0, WIDTH))
-
-    def draw(self, screen):
-        c = (self.brightness, self.brightness, 255)
-        pygame.draw.circle(screen, c, (int(self.x), int(self.y)), int(self.size))
+    def draw(self, screen, camera_pos):
+        # Calculate screen position based on parallax
+        # The star moves slightly with camera
+        draw_x = (self.world_pos.x - camera_pos.x * self.parallax) % WIDTH
+        draw_y = (self.world_pos.y - camera_pos.y * self.parallax) % HEIGHT
+        pygame.draw.circle(screen, self.color, (int(draw_x), int(draw_y)), int(self.size))
 
 class Particle:
     def __init__(self, x, y, color):
         self.pos = pygame.Vector2(x, y)
-        self.vel = pygame.Vector2(random.uniform(-6, 6), random.uniform(-6, 6))
+        self.vel = pygame.Vector2(random.uniform(-5, 5), random.uniform(-5, 5))
         self.life = 1.0
         self.color = color
 
     def update(self, dt):
         self.pos += self.vel * 60 * dt
-        self.life -= 1.8 * dt
+        self.life -= 1.5 * dt
 
-    def draw(self, screen):
-        alpha = max(0, int(255 * self.life))
-        # Surface with alpha for particles
-        pygame.draw.circle(screen, self.color, (int(self.pos.x), int(self.pos.y)), 2)
-
-class Button:
-    def __init__(self, x, y, w, h, text, color):
-        self.rect = pygame.Rect(x, y, w, h)
-        self.text = text
-        self.color = color
-        self.is_hovered = False
-        self.font = pygame.font.SysFont("Verdana, sans-serif", 28)
-
-    def draw(self, screen):
-        border_color = (255, 255, 255) if self.is_hovered else (80, 80, 100)
-        thick = 3 if self.is_hovered else 1
-        
-        # Draw background
-        pygame.draw.rect(screen, (20, 20, 40), self.rect, border_radius=8)
-        # Draw border
-        pygame.draw.rect(screen, border_color, self.rect, thick, border_radius=8)
-        
-        text_surf = self.font.render(self.text, True, (255, 255, 255))
-        text_rect = text_surf.get_rect(center=self.rect.center)
-        screen.blit(text_surf, text_rect)
-
-    def check_hover(self, pos):
-        self.is_hovered = self.rect.collidepoint(pos)
-        return self.is_hovered
+    def draw(self, screen, camera_offset):
+        if self.life <= 0: return
+        draw_pos = self.pos - camera_offset
+        pygame.draw.circle(screen, self.color, (int(draw_pos.x), int(draw_pos.y)), 2)
 
 class Game:
     def __init__(self, screen):
         self.screen = screen
         self.state = "MENU"
         self.level = 1
-        self.stars = [Star() for _ in range(120)]
+        self.stars = [Star() for _ in range(250)]
         self.player = None
         self.enemies = []
         self.bullets = []
+        self.items = []
         self.particles = []
+        self.camera_pos = pygame.Vector2(0, 0)
         self.screen_shake = 0.0
         
-        self.start_btn = Button(WIDTH//2 - 100, HEIGHT//2, 200, 50, "INICIAR", (0, 120, 255))
-        self.exit_btn = Button(WIDTH//2 - 100, HEIGHT//2 + 70, 200, 50, "SAIR", (200, 50, 50))
-        
-        self.font_huge = pygame.font.SysFont("Verdana", 72, bold=True)
-        self.font_mid = pygame.font.SysFont("Verdana", 32)
-        self.font_small = pygame.font.SysFont("Arial", 20)
+        # Menu buttons
+        self.font_h = pygame.font.SysFont("Verdana", 72, bold=True)
+        self.font_m = pygame.font.SysFont("Verdana", 28)
+        self.font_s = pygame.font.SysFont("Arial", 18)
+
+    def spawn_item(self, x, y):
+        itype = random.choice(["REPAIR", "SHIELD", "WEAPON"])
+        self.items.append(Item(x, y, itype))
 
     def reset_level(self, lv):
-        self.player = Player(WIDTH // 2, HEIGHT // 2)
-        self.enemies = [Enemy(random.randint(100, WIDTH-100), random.randint(100, HEIGHT-100), lv) for _ in range(1 + lv * 2)]
+        self.level = lv
+        self.player = Player(WORLD_SIZE//2, WORLD_SIZE//2)
+        # Spawn enemies in the world
+        self.enemies = []
+        for _ in range(3 + lv * 3):
+            ex = random.randint(100, WORLD_SIZE-100)
+            ey = random.randint(100, WORLD_SIZE-100)
+            self.enemies.append(Enemy(ex, ey, lv))
+        
         self.bullets = []
+        self.items = []
         self.particles = []
         self.state = "PLAYING"
-        self.level = lv
 
     async def run(self, clock):
         running = True
@@ -110,125 +93,149 @@ class Game:
             mouse_pos = pygame.mouse.get_pos()
             
             for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
+                if event.type == pygame.QUIT: running = False
                 if event.type == pygame.MOUSEBUTTONDOWN:
-                    if self.state == "MENU":
-                        if self.start_btn.check_hover(mouse_pos):
-                            self.reset_level(1)
-                        if self.exit_btn.check_hover(mouse_pos):
-                            running = False
-                    elif self.state == "GAME_OVER" or self.state == "VICTORY":
-                        self.state = "MENU"
+                    if self.state in ["MENU", "GAME_OVER", "VICTORY"]:
+                        self.reset_level(1)
                     elif self.state == "NEXT_LEVEL":
                         self.reset_level(self.level + 1)
 
-            # Update Background
-            for star in self.stars: star.update(dt)
-            
+            # Update loop
             if self.state == "PLAYING" and self.player:
                 keys = pygame.key.get_pressed()
-                shot = self.player.handle_input(keys, dt)
-                if shot:
-                    self.bullets.append(shot)
-                    self.screen_shake = 4.0
+                # 1. Update Camera (Follow Player)
+                target_cam = self.player.pos - pygame.Vector2(WIDTH//2, HEIGHT//2)
+                self.camera_pos += (target_cam - self.camera_pos) * 5 * dt
+                
+                # 2. Player Input/Update
+                shot_data = self.player.handle_input(keys, dt)
+                if shot_data:
+                    if isinstance(shot_data, list): self.bullets.extend(shot_data)
+                    else: self.bullets.append(shot_data)
+                    self.screen_shake = 3.0
                 
                 self.player.update(dt)
+                # World Bounds
+                self.player.pos.x = max(0, min(WORLD_SIZE, self.player.pos.x))
+                self.player.pos.y = max(0, min(WORLD_SIZE, self.player.pos.y))
                 
-                # Boundary wrap
-                if self.player.pos.x < 0: self.player.pos.x = WIDTH
-                if self.player.pos.x > WIDTH: self.player.pos.x = 0
-                if self.player.pos.y < 0: self.player.pos.y = HEIGHT
-                if self.player.pos.y > HEIGHT: self.player.pos.y = 0
-                
+                # 3. Enemies
                 for enemy in self.enemies[:]:
-                    enemy.update_ai(self.player.pos, dt)
-                    if handle_collision(self.player, enemy):
-                        self.screen_shake = 12.0
+                    e_shot = enemy.update_ai(self.player.pos, dt)
+                    if e_shot: self.bullets.append(e_shot)
                     
+                    if handle_collision(self.player, enemy):
+                        self.screen_shake = 10.0
+                        damage = 10
+                        if self.player.shield > 0: self.player.shield -= damage
+                        else: self.player.hp -= damage
+                        
+                    # Bullets check
                     for b in self.bullets[:]:
-                        if check_bullet_collision(b, enemy):
-                            enemy.hp -= 1
+                        if b.owner_type == "player" and check_bullet_collision(b, enemy):
+                            enemy.hp -= 15
                             if b in self.bullets: self.bullets.remove(b)
-                            self.screen_shake = 6.0
-                            for _ in range(8):
-                                self.particles.append(Particle(b.pos.x, b.pos.y, enemy.color))
+                            self.screen_shake = 5.0
+                            for _ in range(5): self.particles.append(Particle(b.pos.x, b.pos.y, enemy.color))
                             
                             if enemy.hp <= 0:
                                 if enemy in self.enemies: self.enemies.remove(enemy)
-                                for _ in range(15):
-                                    self.particles.append(Particle(enemy.pos.x, enemy.pos.y, (255, 255, 255)))
-                
+                                if random.random() < 0.4: self.spawn_item(enemy.pos.x, enemy.pos.y)
+                                for _ in range(15): self.particles.append(Particle(enemy.pos.x, enemy.pos.y, (255, 255, 255)))
+                        
+                        elif b.owner_type == "enemy" and check_bullet_collision(b, self.player):
+                            if b in self.bullets: self.bullets.remove(b)
+                            damage = 10
+                            if self.player.shield > 0: self.player.shield -= damage
+                            else: self.player.hp -= damage
+                            self.screen_shake = 8.0
+                            for _ in range(5): self.particles.append(Particle(self.player.pos.x, self.player.pos.y, (255, 0, 0)))
+
+                # 4. Items
+                for item in self.items[:]:
+                    item.update(dt)
+                    if (item.pos - self.player.pos).length() < self.player.radius + item.radius:
+                        if item.item_type == "REPAIR": self.player.hp = min(self.player.max_hp, self.player.hp + 30)
+                        elif item.item_type == "SHIELD": self.player.shield = min(self.player.max_shield, self.player.shield + 50)
+                        elif item.item_type == "WEAPON": self.player.weapon_level = min(3, self.player.weapon_level + 1)
+                        self.items.remove(item)
+
+                # 5. General Updates
                 for b in self.bullets[:]:
                     b.update(dt)
                     if b.life <= 0: self.bullets.remove(b)
+                for p in self.particles[:]:
+                    p.update(dt)
+                    if p.life <= 0: self.particles.remove(p)
                     
+                if self.player.hp <= 0: self.state = "GAME_OVER"
                 if not self.enemies:
-                    if self.level < 3:
-                        self.state = "NEXT_LEVEL"
-                    else:
-                        self.state = "VICTORY"
+                    if self.level < 3: self.state = "NEXT_LEVEL"
+                    else: self.state = "VICTORY"
 
-            for p in self.particles[:]:
-                p.update(dt)
-                if p.life <= 0: self.particles.remove(p)
-
-            # Render
-            render_off = pygame.Vector2(0,0)
-            if self.screen_shake > 0:
-                render_off = pygame.Vector2(random.uniform(-self.screen_shake, self.screen_shake), random.uniform(-self.screen_shake, self.screen_shake))
-                self.screen_shake *= 0.8
-            
+            # DRAWING
             self.screen.fill(BG_DEEP)
-            for star in self.stars: star.draw(screen)
+            # Far background stars (parallax)
+            for star in self.stars: star.draw(self.screen, self.camera_pos)
             
-            if self.state == "MENU":
-                title = self.font_huge.render("ASTRO ARENA", True, UI_ACCENT)
-                self.screen.blit(title, (WIDTH//2 - title.get_width()//2, HEIGHT//4))
-                self.start_btn.check_hover(mouse_pos)
-                self.exit_btn.check_hover(mouse_pos)
-                self.start_btn.draw(self.screen)
-                self.exit_btn.draw(self.screen)
-                
-            elif self.state in ["PLAYING", "NEXT_LEVEL", "VICTORY"]:
-                for p in self.particles: p.draw(self.screen)
-                for b in self.bullets: b.draw(self.screen)
-                if self.player: self.player.draw(self.screen)
-                for e in self.enemies: e.draw(self.screen)
-                
-                # HUD
-                lvl_surf = self.font_mid.render(f"FASE {self.level}", True, (255, 255, 255))
-                self.screen.blit(lvl_surf, (20, 20))
-                
-                if self.level == 1:
-                    inst = self.font_small.render("WASD: MOVER | ESPAÇO: ATIRAR", True, UI_ACCENT)
-                    self.screen.blit(inst, (WIDTH//2 - inst.get_width()//2, HEIGHT - 40))
+            # World Objects (apply camera offset)
+            cam_off = self.camera_pos
+            if self.screen_shake > 0:
+                cam_off += pygame.Vector2(random.uniform(-self.screen_shake, self.screen_shake), random.uniform(-self.screen_shake, self.screen_shake))
+                self.screen_shake *= 0.9
 
-            if self.state == "NEXT_LEVEL":
-                overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-                overlay.fill((0, 0, 0, 180))
-                self.screen.blit(overlay, (0,0))
-                txt = self.font_mid.render("COMPLETO!", True, (0, 255, 100))
-                self.screen.blit(txt, (WIDTH//2 - txt.get_width()//2, HEIGHT//2))
-                sub = self.font_small.render("Clique para ir para a próxima fase", True, (255, 255, 255))
+            if self.state != "MENU":
+                for item in self.items: item.draw(self.screen, cam_off)
+                for b in self.bullets: b.draw(self.screen, cam_off)
+                for p in self.particles: p.draw(self.screen, cam_off)
+                for e in self.enemies: e.draw(self.screen, cam_off)
+                if self.player: self.player.draw(self.screen, cam_off)
+                
+                # DRAW WORLD BOUNDS
+                bound_rect = pygame.Rect(-cam_off.x, -cam_off.y, WORLD_SIZE, WORLD_SIZE)
+                pygame.draw.rect(self.screen, (30, 30, 50), bound_rect, 5)
+
+                # HUD
+                # HP Bar
+                pygame.draw.rect(self.screen, (60, 0, 0), (30, HEIGHT - 60, 200, 20))
+                hp_w = (self.player.hp / self.player.max_hp) * 200
+                pygame.draw.rect(self.screen, (255, 0, 0), (30, HEIGHT - 60, hp_w, 20))
+                # Shield Bar
+                pygame.draw.rect(self.screen, (0, 30, 60), (30, HEIGHT - 35, 200, 10))
+                sh_w = (self.player.shield / self.player.max_shield) * 200
+                pygame.draw.rect(self.screen, (0, 150, 255), (30, HEIGHT - 35, sh_w, 10))
+                
+                lvl_txt = self.font_m.render(f"FASE {self.level} | ARMA: NV {self.player.weapon_level}", True, UI_ACCENT)
+                self.screen.blit(lvl_txt, (30, 30))
+
+            # Overlays
+            if self.state == "MENU":
+                title = self.font_h.render("ASTRO ARENA", True, UI_ACCENT)
+                self.screen.blit(title, (WIDTH//2 - title.get_width()//2, HEIGHT//3))
+                sub = self.font_m.render("CLIQUE PARA EXPLORAR O ESPAÇO", True, (255, 255, 255))
                 self.screen.blit(sub, (WIDTH//2 - sub.get_width()//2, HEIGHT//2 + 50))
                 
-            if self.state == "VICTORY":
+            elif self.state == "GAME_OVER":
                 overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-                overlay.fill((0, 0, 0, 200))
+                overlay.fill((100, 0, 0, 150))
                 self.screen.blit(overlay, (0,0))
-                txt = self.font_huge.render("CAMPEÃO!", True, UI_ACCENT)
+                txt = self.font_h.render("NAVE DESTRUÍDA", True, (255, 255, 255))
                 self.screen.blit(txt, (WIDTH//2 - txt.get_width()//2, HEIGHT//2))
-                sub = self.font_small.render("Clique para voltar ao menu", True, (255, 255, 255))
-                self.screen.blit(sub, (WIDTH//2 - sub.get_width()//2, HEIGHT//2 + 80))
+                
+            elif self.state == "VICTORY":
+                overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+                overlay.fill((0, 50, 0, 150))
+                self.screen.blit(overlay, (0,0))
+                txt = self.font_h.render("GALAXY CLEAR!", True, UI_ACCENT)
+                self.screen.blit(txt, (WIDTH//2 - txt.get_width()//2, HEIGHT//2))
 
             pygame.display.flip()
             await asyncio.sleep(0)
 
 async def main():
-    global screen # Need global for pygbag/wasm simplicity sometimes
+    global screen
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("🚀 Astro-Arena Battle")
+    pygame.display.set_caption("🚀 Astro-Arena: Expedition")
     clock = pygame.time.Clock()
     game = Game(screen)
     await game.run(clock)
