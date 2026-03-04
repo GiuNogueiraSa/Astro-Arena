@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+build/
+dist/
+.env
+.venv
+venv/
+.pytest_cache/
+.vscode/
+.idea/
+src/build/
+src/dist/
