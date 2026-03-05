@@ -132,6 +132,41 @@ class Game:
             "Sua única missão é voltar para casa: O Planeta Terra."
         ]
         self.story_timer = 0
+        
+        # Pre-render Story Surfaces
+        self.story_surfs = [self.font_story.render(txt, True, (200, 200, 255)) for txt in self.story_texts]
+        
+        # Pre-scale Selection Assets
+        self.pilot_previews = []
+        pw = self.pilots_img.get_width() // 3
+        ph = self.pilots_img.get_height()
+        for i in range(3):
+            p_rect = pygame.Rect(i * pw, 0, pw, ph)
+            self.pilot_previews.append(pygame.transform.scale(self.pilots_img.subsurface(p_rect), (240, 240)))
+            
+        self.ship_previews = []
+        sw = self.ships_img.get_width() // 3
+        sh = self.ships_img.get_height()
+        for i in range(3):
+            s_rect = pygame.Rect(i * sw, 0, sw, sh)
+            self.ship_previews.append(pygame.transform.scale(self.ships_img.subsurface(s_rect), (180, 140)))
+            
+        # UI Pre-renders
+        self.ui_title = self.font_title.render("ASTRO ARENA", True, UI_ACCENT)
+        self.ui_prompt_cont = self.font_ui.render("[CLIQUE PARA CONTINUAR]", True, UI_ACCENT)
+        self.ui_header1 = self.font_ui.render("ESCOLHA SEU PILOTO", True, UI_ACCENT)
+        self.ui_header2 = self.font_ui.render("ESCOLHA SUA NAVE", True, UI_ACCENT)
+        self.ui_btn_mission = self.font_ui.render("INICIAR MISSÃO", True, (0, 0, 0))
+        self.ui_lock = self.font_ui.render("BLOQUEADO", True, (200, 50, 50))
+        
+        # Static Overlays
+        self.overlay_story = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        self.overlay_story.fill((0, 0, 0, 230))
+        self.overlay_selection = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        self.overlay_selection.fill((10, 10, 30, 220))
+        self.overlay_dark = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        self.overlay_dark.fill((0, 0, 0, 200))
+
         self.init_background(1)
 
     def init_background(self, lv):
@@ -347,103 +382,69 @@ class Game:
                     self.screen.blit(i3, (WIDTH//2 - i3.get_width()//2, 140))
 
             if self.state == "MENU":
-                title = self.font_title.render("ASTRO ARENA", True, UI_ACCENT)
-                self.screen.blit(title, (WIDTH//2 - title.get_width()//2, HEIGHT//3))
+                self.screen.blit(self.ui_title, (WIDTH//2 - self.ui_title.get_width()//2, HEIGHT//3))
                 glow = abs(math.sin(pygame.time.get_ticks() * 0.003)) * 100 + 155
                 sub = self.font_ui.render("CLIQUE PARA INICIAR A MISSÃO", True, (glow, glow, glow))
                 self.screen.blit(sub, (WIDTH//2 - sub.get_width()//2, HEIGHT//2 + 80))
             
             elif self.state == "STORY":
-                overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-                overlay.fill((0, 0, 0, 230))
-                self.screen.blit(overlay, (0,0))
-                
+                self.screen.blit(self.overlay_story, (0,0))
                 for i in range(self.story_index + 1):
-                    # Fading effect for the current line
-                    alpha = 255 if i < self.story_index else min(255, self.story_timer * 5)
-                    txt = self.font_story.render(self.story_texts[i], True, (200, 200, 255))
-                    txt.set_alpha(alpha)
-                    self.screen.blit(txt, (WIDTH//2 - txt.get_width()//2, 200 + i * 60))
+                    alpha = 255 if i < self.story_index else min(255, self.story_timer * 8)
+                    surf = self.story_surfs[i].copy()
+                    surf.set_alpha(alpha)
+                    self.screen.blit(surf, (WIDTH//2 - surf.get_width()//2, 200 + i * 60))
                 
                 self.story_timer += 1
-                prompt = self.font_ui.render("[CLIQUE PARA CONTINUAR]", True, UI_ACCENT)
+                prompt = self.ui_prompt_cont.copy()
                 prompt.set_alpha(150 + int(math.sin(pygame.time.get_ticks() * 0.005) * 100))
                 self.screen.blit(prompt, (WIDTH//2 - prompt.get_width()//2, HEIGHT - 100))
 
             elif self.state == "SELECTION":
-                overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-                overlay.fill((10, 10, 30, 220))
-                self.screen.blit(overlay, (0,0))
+                self.screen.blit(self.overlay_selection, (0,0))
+                self.screen.blit(self.ui_header1, (WIDTH//2 - self.ui_header1.get_width()//2, 50))
                 
-                header1 = self.font_ui.render("ESCOLHA SEU PILOTO", True, UI_ACCENT)
-                self.screen.blit(header1, (WIDTH//2 - header1.get_width()//2, 50))
-                
-                # Draw Pilot Options
-                pw = self.pilots_img.get_width() // 3
-                ph = self.pilots_img.get_height()
                 for i in range(3):
                     rect = pygame.Rect(100 + i * 350, 100, 250, 250)
                     color = UI_ACCENT if self.selected_pilot == i else (50, 50, 80)
                     pygame.draw.rect(self.screen, color, rect, 3 if self.selected_pilot == i else 1, border_radius=15)
-                    
-                    p_rect = pygame.Rect(i * pw, 0, pw, ph)
-                    img_scaled = pygame.transform.scale(self.pilots_img.subsurface(p_rect), (240, 240))
-                    self.screen.blit(img_scaled, (rect.x + 5, rect.y + 5))
+                    self.screen.blit(self.pilot_previews[i], (rect.x + 5, rect.y + 5))
                     
                     if i not in self.unlocked_skins:
                         block = pygame.Surface((250, 250), pygame.SRCALPHA)
                         block.fill((0, 0, 0, 180))
                         self.screen.blit(block, rect.topleft)
-                        lock = self.font_ui.render("BLOQUEADO", True, (200, 50, 50))
-                        self.screen.blit(lock, (rect.centerx - lock.get_width()//2, rect.centery - 15))
+                        self.screen.blit(self.ui_lock, (rect.centerx - self.ui_lock.get_width()//2, rect.centery - 15))
 
-                header2 = self.font_ui.render("ESCOLHA SUA NAVE", True, UI_ACCENT)
-                self.screen.blit(header2, (WIDTH//2 - header2.get_width()//2, 400))
-                
-                # Draw Ship Options
-                sw = self.ships_img.get_width() // 3
-                sh = self.ships_img.get_height()
+                self.screen.blit(self.ui_header2, (WIDTH//2 - self.ui_header2.get_width()//2, 400))
                 for i in range(3):
                     rect = pygame.Rect(100 + i * 350, 450, 250, 200)
                     color = UI_ACCENT if self.selected_ship == i else (50, 50, 80)
                     pygame.draw.rect(self.screen, color, rect, 3 if self.selected_ship == i else 1, border_radius=15)
-                    
-                    s_rect = pygame.Rect(i * sw, 0, sw, sh)
-                    img_scaled = pygame.transform.scale(self.ships_img.subsurface(s_rect), (180, 140))
-                    self.screen.blit(img_scaled, (rect.centerx - 90, rect.centery - 70))
+                    self.screen.blit(self.ship_previews[i], (rect.centerx - 90, rect.centery - 70))
 
-                # Start Button
                 btn_rect = pygame.Rect(WIDTH//2 - 150, 700, 300, 60)
                 pygame.draw.rect(self.screen, UI_ACCENT, btn_rect, border_radius=30)
-                btn_txt = self.font_ui.render("INICIAR MISSÃO", True, (0, 0, 0))
-                self.screen.blit(btn_txt, (btn_rect.centerx - btn_txt.get_width()//2, btn_rect.centery - 18))
+                self.screen.blit(self.ui_btn_mission, (btn_rect.centerx - self.ui_btn_mission.get_width()//2, btn_rect.centery - 18))
 
             elif self.state == "NEXT_LEVEL":
-                overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-                overlay.fill((0, 0, 0, 200))
-                self.screen.blit(overlay, (0,0))
-                
+                self.screen.blit(self.overlay_dark, (0,0))
                 txt = self.font_title.render(f"SETOR {self.level} LIMPO", True, UI_ACCENT)
                 self.screen.blit(txt, (WIDTH//2 - txt.get_width()//2, 100))
                 
-                # Show Current Pilot in a nice frame
-                pw = self.pilots_img.get_width() // 3
-                ph = self.pilots_img.get_height()
-                p_rect = pygame.Rect(self.selected_pilot * pw, 0, pw, ph)
-                img_scaled = pygame.transform.scale(self.pilots_img.subsurface(p_rect), (300, 300))
-                self.screen.blit(img_scaled, (WIDTH//2 - 150, 220))
+                # Pre-scaled pilot info
+                p_img = pygame.transform.scale(self.pilot_previews[self.selected_pilot], (300, 300))
+                self.screen.blit(p_img, (WIDTH//2 - 150, 220))
                 
-                info = self.font_ui.render(f"PILOTO {self.selected_pilot + 1} PRONTO PARA O PRÓXIMO SETOR", True, (255, 255, 255))
+                info = self.font_ui.render(f"PILOTO {self.selected_pilot + 1} PRONTO", True, (255, 255, 255))
                 self.screen.blit(info, (WIDTH//2 - info.get_width()//2, 540))
                 
                 if self.level + 1 <= 3:
-                    # Start Button
                     btn_rect = pygame.Rect(WIDTH//2 - 150, 620, 300, 70)
                     pygame.draw.rect(self.screen, (0, 255, 100), btn_rect, border_radius=35)
                     btn_txt = self.font_ui.render("INICIAR FASE", True, (0, 0, 0))
                     self.screen.blit(btn_txt, (btn_rect.centerx - btn_txt.get_width()//2, btn_rect.centery - 18))
                     
-                    # Change Skin Button
                     skin_btn = pygame.Rect(WIDTH//2 - 150, 710, 300, 60)
                     pygame.draw.rect(self.screen, (100, 100, 200), skin_btn, border_radius=30)
                     skin_txt = self.font_ui.render("TROCAR SKIN", True, (255, 255, 255))
@@ -465,7 +466,7 @@ class Game:
                 txt = self.font_title.render("TERRA À VISTA!", True, UI_ACCENT)
                 self.screen.blit(txt, (WIDTH//2 - txt.get_width()//2, HEIGHT//3))
                 
-                msg = self.font_story.render("Você conseguiu voltar para casa. Missão cumprida.", True, (255, 255, 255))
+                msg = self.font_story.render("Você conseguiu voltar para casa.", True, (255, 255, 255))
                 self.screen.blit(msg, (WIDTH//2 - msg.get_width()//2, HEIGHT//2))
                 
                 sub = self.font_ui.render("CLIQUE PARA RECOMECAR", True, (255, 255, 255))
