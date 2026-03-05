@@ -96,8 +96,8 @@ class Game:
         self.state = "MENU"
         self.level = 1
         self.nebulae = []
-        self.stars = [Star() for _ in range(400)]
-        self.dust = [SpaceDust() for _ in range(40)]
+        self.stars = [Star() for _ in range(150)]
+        self.dust = [SpaceDust() for _ in range(20)]
         self.player = None
         self.enemies = []
         self.bullets = []
@@ -109,10 +109,23 @@ class Game:
         # Seçores (Universe exploration colors)
         self.bg_colors = [(4, 4, 15), (15, 5, 5), (5, 12, 10)]
         
-        # Asset Loading
-        self.pilots_img = pygame.image.load("assets/pilots.png").convert_alpha()
-        self.ships_img = pygame.image.load("assets/ships.png").convert_alpha()
-        self.earth_img = pygame.image.load("assets/earth.png").convert_alpha()
+        # Asset Loading - lazy with try/except for web
+        try:
+            self.pilots_img = pygame.image.load("assets/pilots.png").convert_alpha()
+        except:
+            self.pilots_img = pygame.Surface((300, 100))
+            self.pilots_img.fill((50, 50, 150))
+        try:
+            self.ships_img = pygame.image.load("assets/ships.png").convert_alpha()
+        except:
+            self.ships_img = pygame.Surface((300, 100))
+            self.ships_img.fill((50, 100, 50))
+        try:
+            self.earth_img = pygame.image.load("assets/earth.png").convert_alpha()
+            self.earth_img = pygame.transform.scale(self.earth_img, (300, 300))
+        except:
+            self.earth_img = pygame.Surface((300, 300))
+            self.earth_img.fill((0, 80, 200))
         
         self.selected_pilot = 0
         self.selected_ship = 0
@@ -223,13 +236,23 @@ class Game:
 
     async def run(self, clock):
         running = True
+        self._click_count = 0  # Track clicks to handle browser's discarded first-click
         while running:
-            dt = clock.tick(FPS) / 1000.0
+            dt = min(clock.tick(FPS) / 1000.0, 0.05)  # Cap dt to avoid spiral of death
             mouse_pos = pygame.mouse.get_pos()
             
             for event in pygame.event.get():
                 if event.type == pygame.QUIT: running = False
+                
+                # Handle both MOUSEBUTTONDOWN and KEYDOWN (web compatibility)
+                advance = False
                 if event.type == pygame.MOUSEBUTTONDOWN:
+                    self._click_count += 1
+                    advance = True
+                if event.type == pygame.KEYDOWN and event.key in [pygame.K_SPACE, pygame.K_RETURN]:
+                    advance = True
+                    
+                if advance:
                     if self.state == "MENU":
                         self.state = "STORY"
                         self.story_index = 0
@@ -240,29 +263,32 @@ class Game:
                         if self.story_index >= len(self.story_texts):
                             self.state = "SELECTION"
                     elif self.state == "SELECTION":
-                        # UI Click detection for pilots/ships
-                        mx, my = event.pos
-                        if 100 < my < 350: # Pilot selection row
-                            if 100 < mx < 350: self.selected_pilot = 0
-                            elif 450 < mx < 700: self.selected_pilot = 1
-                            elif 800 < mx < 1050: self.selected_pilot = 2
-                        elif 450 < my < 650: # Ship selection row
-                            if 100 < mx < 350: self.selected_ship = 0
-                            elif 450 < mx < 700: self.selected_ship = 1
-                            elif 800 < mx < 1050: self.selected_ship = 2
-                        elif my > 680: # Start Button
-                            if WIDTH//2 - 150 < mx < WIDTH//2 + 150:
-                                self.reset_level(1)
+                        mx, my = event.pos if event.type == pygame.MOUSEBUTTONDOWN else (0, 0)
+                        if event.type == pygame.MOUSEBUTTONDOWN:
+                            if 100 < my < 350:  # Pilot selection row
+                                if 100 < mx < 350: self.selected_pilot = 0
+                                elif 450 < mx < 700: self.selected_pilot = 1
+                                elif 800 < mx < 1050: self.selected_pilot = 2
+                            elif 450 < my < 650:  # Ship selection row
+                                if 100 < mx < 350: self.selected_ship = 0
+                                elif 450 < mx < 700: self.selected_ship = 1
+                                elif 800 < mx < 1050: self.selected_ship = 2
+                            elif my > 680:  # Start Button
+                                if WIDTH//2 - 150 < mx < WIDTH//2 + 150:
+                                    self.reset_level(1)
+                        elif event.type == pygame.KEYDOWN:  # Space/Enter starts mission
+                            self.reset_level(1)
                     elif self.state in ["GAME_OVER", "VICTORY"]:
                         self.state = "MENU"
                     elif self.state == "NEXT_LEVEL":
-                        # Start button or Change Skin
-                        mx, my = event.pos
+                        mx, my = event.pos if event.type == pygame.MOUSEBUTTONDOWN else (WIDTH//2, 640)
                         if WIDTH//2 - 150 < mx < WIDTH//2 + 150:
                             if 620 < my < 690:
                                 self.reset_level(self.level + 1)
                             elif 710 < my < 770:
                                 self.state = "SELECTION"
+                        elif event.type == pygame.KEYDOWN:
+                            self.reset_level(self.level + 1)
 
             if self.state == "PLAYING" and self.player:
                 keys = pygame.key.get_pressed()
@@ -339,7 +365,7 @@ class Game:
             
             # Level 3 Special: Earth in background
             if self.level == 3:
-                e_pos = pygame.Vector2(500, 200) - self.camera_pos * 0.02
+                e_pos = pygame.Vector2(200, 100) - self.camera_pos * 0.02
                 self.screen.blit(self.earth_img, (e_pos.x, e_pos.y))
                 
             for star in self.stars: star.draw(self.screen, self.camera_pos)
@@ -384,7 +410,7 @@ class Game:
             if self.state == "MENU":
                 self.screen.blit(self.ui_title, (WIDTH//2 - self.ui_title.get_width()//2, HEIGHT//3))
                 glow = abs(math.sin(pygame.time.get_ticks() * 0.003)) * 100 + 155
-                sub = self.font_ui.render("CLIQUE PARA INICIAR A MISSÃO", True, (glow, glow, glow))
+                sub = self.font_ui.render("CLIQUE ou ESPAÇO para iniciar", True, (glow, glow, glow))
                 self.screen.blit(sub, (WIDTH//2 - sub.get_width()//2, HEIGHT//2 + 80))
             
             elif self.state == "STORY":
